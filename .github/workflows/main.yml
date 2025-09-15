@@ -1,0 +1,44 @@
+# Trigger deployment only on push to main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Windows Server on main branch push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the files
+        uses: actions/checkout@v2
+
+      - name: Deploy to Windows Server
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+
+      - name: Executing remote commands on Windows Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            powershell -Command "
+              Write-Output 'Updating Windows Server...';
+              # Install IIS if not already installed
+              Install-WindowsFeature -name Web-Server -IncludeManagementTools;
+              
+              Write-Output 'Starting IIS...';
+              Start-Service W3SVC;
+              Set-Service W3SVC -StartupType Automatic;
+
+              # Deploy files (replace TARGET with your deployment folder)
+              Write-Output 'Deploying files...';
+              Remove-Item -Recurse -Force C:\inetpub\wwwroot\*;
+              Copy-Item -Recurse -Force $env:USERPROFILE\${{ secrets.TARGET_DIR }}\* C:\inetpub\wwwroot\;
+            "
